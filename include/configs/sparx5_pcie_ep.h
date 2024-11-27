@@ -3,8 +3,8 @@
  * Copyright (c) 2018 Microsemi Corporation
  */
 
-#ifndef __INCL_INCLUDE_CONFIGS_SPARX5__
-#define __INCL_INCLUDE_CONFIGS_SPARX5__
+#ifndef __INCL_INCLUDE_CONFIGS_SPARX5_PCIE_EP__
+#define __INCL_INCLUDE_CONFIGS_SPARX5_PCIE_EP__
 
 #include <linux/sizes.h>
 
@@ -33,23 +33,4 @@
 #define PHYS_SRAM_MEM_ADDR		UL(0x632000000)
 #define PHYS_SRAM_MEM_SIZE		SZ_32K
 
-#define ENV_PCB		"pcb:sc,pcb_rev:do,"
-
-#if defined(CONFIG_MMC_SDHCI)
-#define CFG_ENV_CALLBACK_LIST_STATIC ENV_PCB "mmc_cur:mmc_cur,"
-#else
-#define CFG_ENV_CALLBACK_LIST_STATIC ENV_PCB "nand_cur:nand_cur,"
-#endif
-
-#define CFG_ENV_FLAGS_LIST_STATIC "pcb:sc,pcb_rev:do"
-
-#if defined(CONFIG_MMC_SDHCI)
-/* Need writeb */
-#define CONFIG_MMC_SDHCI_IO_ACCESSORS
-#endif
-
-#define CFG_SYS_BOOTMAPSZ	SZ_64M	/* Initial map for Linux*/
-
-#define PHY_ANEG_TIMEOUT		20000
-
-#endif	/* __INCL_INCLUDE_CONFIGS_SPARX5__ */
+#endif	/* __INCL_INCLUDE_CONFIGS_SPARX5_PCIE_EP__ */
