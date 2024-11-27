@@ -1936,6 +1936,16 @@ config TARGET_SPARX5
 	  Support for Microchip Sparx5 reference board platform. It supports
 	  2Gb DDR, and 2 A53 cores.
 
+config TARGET_SPARX5_PCIE_EP
+	bool "Support Microchip Sparx5 platform used as a PCIe Endpoint"
+	select ARM64
+	select ARMV8_SET_SMPEN
+	select ARMV8_MULTIENTRY
+	select SPL
+	select SUPPORT_SPL
+	  help
+	  Support for Microchip Sparx5 reference board platform in PCIe EP mode.
+
 config ARCH_UNIPHIER
 	bool "Socionext UniPhier SoCs"
 	select BOARD_LATE_INIT

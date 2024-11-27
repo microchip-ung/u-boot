@@ -8,6 +8,8 @@
 
 .extern boot0
 
+#define CPU_RELEASE_ADDR 0
+
 #ifdef CONFIG_ARMV8_MULTIENTRY
 	branch_if_master x0, 2f
 	/* Secondary: Already in RAM, relocated. Just goto reset. */
