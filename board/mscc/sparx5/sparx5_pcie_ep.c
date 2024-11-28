@@ -21,6 +21,28 @@ enum pcie_ep_access_type {
 	PCIE_LANE_ACCESS = 1,
 };
 
+enum pcie_device_class {
+	PCI_DEVCLS_UNCLASSIFIED_DEVICE = 0x00,
+	PCI_DEVCLS_MASS_STORAGE_CONTROLLER = 0x01,
+	PCI_DEVCLS_NETWORK_CONTROLLER = 0x02,
+	PCI_DEVCLS_DISPLAY_CONTROLLER = 0x03,
+	PCI_DEVCLS_MULTIMEDIA_CONTROLLER = 0x04,
+	PCI_DEVCLS_MEMORY_CONTROLLER = 0x05,
+	PCI_DEVCLS_BRIDGE = 0x06,
+	PCI_DEVCLS_COMMUNICATION_CONTROLLER = 0x07,
+	PCI_DEVCLS_GENERIC_SYSTEM_PERIPHERAL = 0x08,
+	PCI_DEVCLS_INPUT_DEVICE_CONTROLLER = 0x09,
+	PCI_DEVCLS_DOCKING_STATION = 0x0a,
+	PCI_DEVCLS_PROCESSOR = 0x0b,
+	PCI_DEVCLS_SERIAL_BUS_CONTROLLER = 0x0c,
+	PCI_DEVCLS_WIRELESS_CONTROLLER = 0x0d,
+	PCI_DEVCLS_INTELLIGENT_CONTROLLER = 0x0e,
+	PCI_DEVCLS_SATELLITE_COMMUNICATIONS_CONTROLLER = 0x0f,
+	PCI_DEVCLS_ENCRYPTION_CONTROLLER = 0x10,
+	PCI_DEVCLS_SIGNAL_PROCESSING_CONTROLLER = 0x11,
+	PCI_DEVCLS_PROCESSING_ACCELERATORS = 0x12,
+};
+
 struct pcie_ep_config {
 	uint32_t max_link_speed;
 	uint32_t vendor_id;
@@ -729,14 +751,220 @@ static bool pcie_ep_wait_for_cmu_lock(const struct pcie_ep_config *cfg)
 
 static int pcie_ep_set_mode(const struct pcie_ep_config *cfg)
 {
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+	uint32_t val;
+
+	/* Configure PowerOn Reset */
+	mmio_clrsetbits_32(CPU_PCIERST_CFG(cpu_base),
+			   CPU_PCIERST_CFG_POWERONRST_VAL_M,
+			   CPU_PCIERST_CFG_POWERONRST_VAL(0)); /* Reset asserted */
+	mmio_clrsetbits_32(CPU_PCIERST_CFG(cpu_base),
+			   CPU_PCIERST_CFG_POWERONRST_FORCE_M,
+			   CPU_PCIERST_CFG_POWERONRST_FORCE(1)); /* Apply Reset value */
 	/* Set PCIe controller to endpoint mode */
-	// wr_fld(CPU, PCIERST_CFG, POWERONRST_VAL, 0);
-	// wr_fld(CPU, PCIERST_CFG, POWERONRST_FORCE, 1);
-	// wr_fld(CPU, PCIE_SYS_CFG, PCIE_RC_EP_MODE, 0);
-	// expect_fld(CPU, PCIE_SYS_CFG, PCIE_RC_EP_MODE, 0);
-	// expect_fld(CPU, PCIERST_CFG, POWERONRST_FORCE, 1);
-	// wr_fld(CPU, PCIERST_CFG, POWERONRST_FORCE, 0);
-	// expect_fld(CPU, PCIERST_CFG, POWERONRST_FORCE, 0);
+	mmio_clrsetbits_32(CPU_PCIE_SYS_CFG(cpu_base),
+			   CPU_PCIE_SYS_CFG_PCIE_RC_EP_MODE_M,
+			   CPU_PCIE_SYS_CFG_PCIE_RC_EP_MODE(0));
+	val = mmio_read_32(CPU_PCIE_SYS_CFG(cpu_base));
+	if (CPU_PCIE_SYS_CFG_PCIE_RC_EP_MODE_X(val) == 0) {
+		INFO("pcie: In EP Mode\n");
+	} else {
+		INFO("pcie: Error: In RC Mode\n");
+	}
+	val = mmio_read_32(CPU_PCIERST_CFG(cpu_base));
+	if (CPU_PCIERST_CFG_POWERONRST_FORCE_X(val) == 1) {
+		INFO("pcie: PowerOn Reset has been forced\n");
+	}
+	mmio_clrsetbits_32(CPU_PCIERST_CFG(cpu_base),
+			   CPU_PCIERST_CFG_POWERONRST_FORCE_M,
+			   CPU_PCIERST_CFG_POWERONRST_FORCE(0)); /* Release Reset */
+	val = mmio_read_32(CPU_PCIERST_CFG(cpu_base));
+	if (CPU_PCIERST_CFG_POWERONRST_FORCE_X(val) == 0) {
+		INFO("pcie: Reset completed\n");
+	}
+	return 0;
+}
+
+
+static void pcie_ep_ctrl_bar_ena_cfg(const struct pcie_ep_config *cfg)
+{
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+
+	INFO("pcie: Enable access to EP BAR configuration\n");
+	mmio_clrsetbits_32(CPU_PCIE_CFG(cpu_base),
+			   CPU_PCIE_CFG_PCIE_DBI_ACCESS_ENA_M,
+			   CPU_PCIE_CFG_PCIE_DBI_ACCESS_ENA(1));
+
+	mdelay(1);
+}
+
+
+static void pcie_ep_ctrl_ltssm_dis(const struct pcie_ep_config *cfg)
+{
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+
+	INFO("pcie: Disable link initialization and training\n");
+	mmio_clrsetbits_32(CPU_PCIE_CFG(cpu_base),
+			   CPU_PCIE_CFG_LTSSM_DIS_M,
+			   CPU_PCIE_CFG_LTSSM_DIS(1));
+	mdelay(1);
+}
+
+
+static void pcie_ep_ctrl_bar_dis_cfg(const struct pcie_ep_config *cfg)
+{
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+
+	INFO("pcie: Disable access to EP BAR configuration\n");
+	mmio_clrsetbits_32(CPU_PCIE_CFG(cpu_base),
+			   CPU_PCIE_CFG_PCIE_DBI_ACCESS_ENA_M,
+			   CPU_PCIE_CFG_PCIE_DBI_ACCESS_ENA(0));
+	mdelay(1);
+}
+
+
+static void pcie_ep_ctrl_ltssm_ena(const struct pcie_ep_config *cfg)
+{
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+
+	INFO("pcie: Enable link initialization and training\n");
+	mmio_clrsetbits_32(CPU_PCIE_CFG(cpu_base),
+			   CPU_PCIE_CFG_LTSSM_DIS_M,
+			   CPU_PCIE_CFG_LTSSM_DIS(0));
+	mdelay(1);
+}
+
+
+static int pcie_ep_ctrl_init(const struct pcie_ep_config *cfg)
+{
+	uintptr_t pcie_ep = SPARX5_PCIE_DM_RC_BASE;
+	uint32_t devid;
+
+	INFO("pcie: Configure EP PF0 Controller values\n");
+
+	pcie_ep_ctrl_ltssm_dis(cfg);
+	if (cfg->max_link_speed) {
+		INFO("pcie: PF0 Max Link Speed: %u\n", cfg->max_link_speed);
+		mmio_clrsetbits_32(PCEP_PF0_PCIE_CAP_LINK_CAPABILITIES_REG(pcie_ep),
+				   PCEP_PF0_PCIE_CAP_LINK_CAPABILITIES_REG_LINK_CAPABILITIES_REG_PCIE_CAP_MAX_LINK_SPEED_M,
+				   PCEP_PF0_PCIE_CAP_LINK_CAPABILITIES_REG_LINK_CAPABILITIES_REG_PCIE_CAP_MAX_LINK_SPEED(cfg->max_link_speed));
+	}
+
+	if (cfg->vendor_id) {
+		INFO("pcie: PF0 and PF1 VendorID and SubSys Vendor ID: 0x%04x\n", cfg->vendor_id);
+		mmio_clrsetbits_32(PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG(pcie_ep),
+				   PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_VENDOR_ID_M,
+				   PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_VENDOR_ID(cfg->vendor_id));
+		mmio_clrsetbits_32(PCEP_PF0_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG(pcie_ep),
+				   PCEP_PF0_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG_SUBSYS_VENDOR_ID_M,
+				   PCEP_PF0_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG_SUBSYS_VENDOR_ID(cfg->vendor_id));
+		mmio_clrsetbits_32(PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG(pcie_ep),
+				   PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_VENDOR_ID_M,
+				   PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_VENDOR_ID(cfg->vendor_id));
+		mmio_clrsetbits_32(PCEP_PF1_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG(pcie_ep),
+				   PCEP_PF1_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG_SUBSYS_VENDOR_ID_M,
+				   PCEP_PF1_TYPE0_HDR_SUBSYSTEM_ID_SUBSYSTEM_VENDOR_ID_REG_SUBSYS_VENDOR_ID(cfg->vendor_id));
+	}
+
+	if (cfg->device_id) {
+		INFO("pcie: PF0 DeviceID: 0x%04x\n", cfg->device_id);
+		mmio_clrsetbits_32(PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG(pcie_ep),
+				   PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_DEVICE_ID_M,
+				   PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_DEVICE_ID(cfg->device_id));
+	}
+
+	/* Ensure PF0 and PF1 device ids are different */
+	devid = mmio_read_32(PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG(pcie_ep));
+	devid = PCEP_PF0_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_DEVICE_ID_X(devid) ^ 0x0f;
+	INFO("pcie: PF1 DeviceID: 0x%04x\n", devid);
+	mmio_clrsetbits_32(PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG(pcie_ep),
+			   PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_DEVICE_ID_M,
+			   PCEP_PF1_TYPE0_HDR_DEVICE_ID_VENDOR_ID_REG_PCI_TYPE0_DEVICE_ID(devid));
+	INFO("pcie: PF1 Device Class: 0x%04x\n", PCI_DEVCLS_PROCESSOR);
+	mmio_clrsetbits_32(PCEP_PF1_TYPE0_HDR_CLASS_CODE_REVISION_ID(pcie_ep),
+			   PCEP_PF1_TYPE0_HDR_CLASS_CODE_REVISION_ID_BASE_CLASS_CODE_M,
+			   PCEP_PF1_TYPE0_HDR_CLASS_CODE_REVISION_ID_BASE_CLASS_CODE(PCI_DEVCLS_PROCESSOR));
+
+	INFO("pcie: Resize PF0 BAR2 to 8MB\n");
+	pcie_ep_ctrl_bar_ena_cfg(cfg);
+	mmio_write_32(PCEP_BAR2_MASK_REG(pcie_ep), SZ_8M - 1);
+	pcie_ep_ctrl_bar_dis_cfg(cfg);
+
+	pcie_ep_ctrl_ltssm_ena(cfg);
+	return 0;
+}
+
+
+static bool pcie_ep_has_cmu_lock(void)
+{
+	uintptr_t pcie_phy_pma = SPARX5_PCIE_PHY_PMA_BASE;
+	uint32_t value;
+
+	INFO("pcie: Enable check of CMU lock\n");
+	mmio_write_32(PCIE_PHY_PMA_PMA_CMU_FF(pcie_phy_pma), PCIE_CMU_ACCESS);
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_CMU_30(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_CMU_30_R_PLL_DLOL_EN_M,
+			   PCIE_PHY_PMA_PMA_CMU_30_R_PLL_DLOL_EN(1));
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_CMU_42(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_CMU_42_R_LOL_RESET_M,
+			   PCIE_PHY_PMA_PMA_CMU_42_R_LOL_RESET(1));
+	mdelay(1);
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_CMU_42(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_CMU_42_R_LOL_RESET_M,
+			   PCIE_PHY_PMA_PMA_CMU_42_R_LOL_RESET(0));
+	mdelay(1);
+
+	value = mmio_read_32(PCIE_PHY_PMA_PMA_CMU_E0(pcie_phy_pma));
+
+	INFO("pcie: PLL Loss Of Lock: 0x%lx\n",
+	       PCIE_PHY_PMA_PMA_CMU_E0_PLL_LOL_UDL_X(value));
+
+	INFO("pcie: PLL VCO CTune: 0x%lx\n",
+	       PCIE_PHY_PMA_PMA_CMU_E0_READ_VCO_CTUNE_3_0(value));
+
+	return !PCIE_PHY_PMA_PMA_CMU_E0_PLL_LOL_UDL_X(value);
+}
+
+static bool pcie_ep_has_rx_lock(void)
+{
+	uintptr_t pcie_phy_pma = SPARX5_PCIE_PHY_PMA_BASE;
+	uint32_t value;
+
+	mmio_write_32(PCIE_PHY_PMA_PMA_CMU_FF(pcie_phy_pma), PCIE_LANE_ACCESS);
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_LANE_82(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_LANE_82_R_LOL_RESET_M,
+			   PCIE_PHY_PMA_PMA_LANE_82_R_LOL_RESET(0));
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_LANE_84(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_LANE_84_R_LOL_CLR_M,
+			   PCIE_PHY_PMA_PMA_LANE_84_R_LOL_CLR(1));
+	mmio_clrsetbits_32(PCIE_PHY_PMA_PMA_LANE_84(pcie_phy_pma),
+			   PCIE_PHY_PMA_PMA_LANE_84_R_LOL_CLR_M,
+			   PCIE_PHY_PMA_PMA_LANE_84_R_LOL_CLR(0));
+
+	mdelay(1);
+
+	value = mmio_read_32(PCIE_PHY_PMA_PMA_LANE_DF(pcie_phy_pma));
+
+	INFO("pcie: RX Lane Loss Of Lock: 0x%lx\n",
+	       PCIE_PHY_PMA_PMA_LANE_DF_LOL_UDL_X(value));
+
+	return !PCIE_PHY_PMA_PMA_LANE_DF_LOL_UDL_X(value);
+}
+
+static int pcie_ep_state(void)
+{
+	uintptr_t cpu_base = SPARX5_CPU_BASE;
+	uint32_t value;
+
+	pcie_ep_has_cmu_lock();
+	pcie_ep_has_rx_lock();
+
+	mdelay(1);
+	value = mmio_read_32(CPU_PCIE_STAT(cpu_base));
+	INFO("pcie: Checking link status: 0x%x\n", value);
+	INFO("pcie:   LTSSM: 0x%lx\n", CPU_PCIE_STAT_LTSSM_STATE_X(value));
+	INFO("pcie:    LINK: 0x%lx\n", CPU_PCIE_STAT_LINK_STATE_X(value));
+	INFO("pcie:      PM: 0x%lx\n", CPU_PCIE_STAT_PM_STATE_X(value));
 	return 0;
 }
 
@@ -777,9 +1005,9 @@ reset_phy:
 		INFO("pcie: Wait 1us to ensure PHY reset is completed\n");
 		udelay(1);
 		pcie_ep_set_mode(cfg);
-		// pcie_ep_ctrl_init(cfg);
-		// pcie_ep_state();
-		// /* EP is operational so watch for for PERST going low */
+		pcie_ep_ctrl_init(cfg);
+		pcie_ep_state();
+		/* EP is operational so watch for for PERST going low */
 		// pcie_ep_wait_for_perst_low(cfg);
 		// pcie_ep_reset_pipe(true);
 		/* Go to sleep */
