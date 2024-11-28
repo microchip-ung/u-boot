@@ -27,6 +27,10 @@
 # define VERBOSE(...)
 #endif
 
+#if !defined(INFO)
+# define INFO(...) printf(__VA_ARGS__)
+#endif
+
 #if !defined(NOTICE)
 # define NOTICE(...) printf(__VA_ARGS__)
 #endif
