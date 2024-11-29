@@ -733,6 +733,17 @@ static void pcie_ep_phy_pcs_tx_margins(void)
 }
 
 
+static void pcie_ep_phy_pcs_rx(void)
+{
+	uintptr_t pcie_phy_pcs = SPARX5_PCIE_PHY_PCS_BASE;
+
+	INFO("pcie: PCS Bypass receiver detection\n");
+	mmio_clrsetbits_32(PCIE_PHY_PCS_PHY_LINK_3C(pcie_phy_pcs),
+			   PCIE_PHY_PCS_PHY_LINK_3C_R_TXDETRX_NOCHKP_R_TXDETRX_NOCHKN_M,
+			   PCIE_PHY_PCS_PHY_LINK_3C_R_TXDETRX_NOCHKP_R_TXDETRX_NOCHKN(1));
+}
+
+
 static bool pcie_ep_wait_for_cmu_lock(const struct pcie_ep_config *cfg)
 {
 	uintptr_t pcie_phy_pma = SPARX5_PCIE_PHY_PMA_BASE;
@@ -997,6 +1008,7 @@ reset_phy:
 	pcie_ep_ssc_clock();
 	pcie_ep_serdes_init();
 	pcie_ep_phy_pcs_tx_margins();
+	pcie_ep_phy_pcs_rx();
 	// pcie_ep_wait_for_perst_high(cfg);
 	pcie_ep_reset_pipe(false);
 	mdelay(1);
