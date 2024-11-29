@@ -951,26 +951,28 @@ static bool pcie_ep_has_rx_lock(void)
 	return !PCIE_PHY_PMA_PMA_LANE_DF_LOL_UDL_X(value);
 }
 
-static int pcie_ep_state(void)
+static uint32_t pcie_ep_state(uint32_t old)
 {
 	uintptr_t cpu_base = SPARX5_CPU_BASE;
 	uint32_t value;
 
-	pcie_ep_has_cmu_lock();
-	pcie_ep_has_rx_lock();
-
-	mdelay(1);
 	value = mmio_read_32(CPU_PCIE_STAT(cpu_base));
-	INFO("pcie: Checking link status: 0x%x\n", value);
-	INFO("pcie:   LTSSM: 0x%lx\n", CPU_PCIE_STAT_LTSSM_STATE_X(value));
-	INFO("pcie:    LINK: 0x%lx\n", CPU_PCIE_STAT_LINK_STATE_X(value));
-	INFO("pcie:      PM: 0x%lx\n", CPU_PCIE_STAT_PM_STATE_X(value));
-	return 0;
+	if (value != old) {
+		pcie_ep_has_cmu_lock();
+		pcie_ep_has_rx_lock();
+		mdelay(1);
+		INFO("pcie: Checking link status: 0x%x\n", value);
+		INFO("pcie:   LTSSM: 0x%lx\n", CPU_PCIE_STAT_LTSSM_STATE_X(value));
+		INFO("pcie:    LINK: 0x%lx\n", CPU_PCIE_STAT_LINK_STATE_X(value));
+		INFO("pcie:      PM: 0x%lx\n", CPU_PCIE_STAT_PM_STATE_X(value));
+	}
+	return value;
 }
 
 
 void pcie_ep_init(const struct pcie_ep_config *cfg)
 {
+	uint32_t state = 0;
 	/* Measurements shows that PERST goes high before there is a clock
 	 * signal, and the EP needs to be completely configured after maximum
 	 * 20ms after PERST goes high, so this is the procedure:
@@ -991,31 +993,32 @@ void pcie_ep_init(const struct pcie_ep_config *cfg)
 	pcie_ep_serdes_reset();
 reset_phy:
 	pcie_ep_reset_pipe(true);
-// 	pcie_ep_config_perst(cfg);
+	// 	pcie_ep_config_perst(cfg);
 	pcie_ep_ssc_clock();
 	pcie_ep_serdes_init();
 	pcie_ep_phy_pcs_tx_margins();
+	// pcie_ep_wait_for_perst_high(cfg);
+	pcie_ep_reset_pipe(false);
+	mdelay(1);
+	if (!pcie_ep_wait_for_cmu_lock(cfg)) {
+		goto reset_phy;
+	}
+	INFO("pcie: Wait 1us to ensure PHY reset is completed\n");
+	udelay(1);
+	pcie_ep_set_mode(cfg);
+	pcie_ep_ctrl_init(cfg);
 	while (true) {
-		// pcie_ep_wait_for_perst_high(cfg);
-		pcie_ep_reset_pipe(false);
-		mdelay(1);
-		if (!pcie_ep_wait_for_cmu_lock(cfg)) {
-			goto reset_phy;
-		}
-		INFO("pcie: Wait 1us to ensure PHY reset is completed\n");
-		udelay(1);
-		pcie_ep_set_mode(cfg);
-		pcie_ep_ctrl_init(cfg);
-		pcie_ep_state();
+		state = pcie_ep_state(state);
+		mdelay(1000);
 		/* EP is operational so watch for for PERST going low */
 		// pcie_ep_wait_for_perst_low(cfg);
 		// pcie_ep_reset_pipe(true);
 		/* Go to sleep */
-		asm volatile (
-			"sleep_loop:"
-			"    wfi ;"
-			"    b sleep_loop;"
-			);
+		/* asm volatile ( */
+		/* 	"sleep_loop:" */
+		/* 	"    wfi ;" */
+		/* 	"    b sleep_loop;" */
+		/* 	); */
 	}
 }
 
