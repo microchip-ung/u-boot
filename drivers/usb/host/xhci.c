@@ -889,20 +889,39 @@ static int xhci_submit_root(struct usb_device *udev, unsigned long pipe,
 	int len, srclen;
 	uint32_t reg;
 	volatile uint32_t *status_reg;
+	volatile uint32_t *pm_reg;
+	volatile uint32_t *usbcmd_reg;
+	volatile uint32_t *usbsts_reg;
 	struct xhci_ctrl *ctrl = xhci_get_ctrl(udev);
 	struct xhci_hccr *hccr = ctrl->hccr;
 	struct xhci_hcor *hcor = ctrl->hcor;
 	int max_ports = HCS_MAX_PORTS(xhci_readl(&hccr->cr_hcsparams1));
+	uint8_t index;
+	uint32_t test;
 
-	if ((req->requesttype & USB_RT_PORT) &&
-	    le16_to_cpu(req->index) > max_ports) {
+	/*
+	 * See 11.24.2.13 in usb 2.0
+	 */
+	if (req->request == USB_REQ_SET_FEATURE &&
+	    req->value == USB_PORT_FEAT_TEST) {
+		index = le16_to_cpu(req->index) & 0xFF;
+		test = le16_to_cpu(req->index) >> 8;
+	} else {
+		index = le16_to_cpu(req->index);
+	}
+
+	if ((req->requesttype & USB_RT_PORT) && index > max_ports) {
 		printf("The request port(%d) exceeds maximum port number\n",
-		       le16_to_cpu(req->index) - 1);
+		       index - 1);
 		return -EINVAL;
 	}
 
 	status_reg = (volatile uint32_t *)
-		     (&hcor->portregs[le16_to_cpu(req->index) - 1].or_portsc);
+		     (&hcor->portregs[index - 1].or_portsc);
+	pm_reg = (volatile uint32_t *)
+		(&hcor->portregs[index - 1].or_portpmsc);
+	usbcmd_reg = (volatile uint32_t *)(&hcor->or_usbcmd);
+	usbsts_reg = (volatile uint32_t *)(&hcor->or_usbsts);
 	srclen = 0;
 
 	typeReq = req->request | req->requesttype << 8;
@@ -1044,6 +1063,33 @@ static int xhci_submit_root(struct usb_device *udev, unsigned long pipe,
 			reg |= PORT_RESET;
 			xhci_writel(status_reg, reg);
 			break;
+		case USB_PORT_FEAT_TEST:
+			/* According to xhci section 4.19.6, first it is
+			 * required to disable the port
+			 */
+			reg &= ~PORT_POWER;
+			xhci_writel(status_reg, reg);
+
+			/* After that it is required to Run/Stop in USBCMD to 0
+			 * and wait for HCH bit in USBSTS to be 1
+			 */
+			reg = xhci_readl(usbcmd_reg);
+			reg &= ~CMD_RUN;
+			xhci_writel(usbcmd_reg, reg);
+
+			while (1) {
+				reg = xhci_readl(usbsts_reg);
+				if (reg | STS_HALT) {
+					break;
+				}
+			}
+
+			/* Now it is OK to set the test patern */
+			reg = xhci_readl(pm_reg);
+			reg |= test << 28;
+			xhci_writel(pm_reg, reg);
+
+			break;
 		default:
 			printf("unknown feature %x\n", le16_to_cpu(req->value));
 			goto unknown;
@@ -1064,7 +1110,7 @@ static int xhci_submit_root(struct usb_device *udev, unsigned long pipe,
 		case USB_PORT_FEAT_C_OVER_CURRENT:
 		case USB_PORT_FEAT_C_ENABLE:
 			xhci_clear_port_change_bit((le16_to_cpu(req->value)),
-							le16_to_cpu(req->index),
+							index,
 							status_reg, reg);
 			break;
 		default:
