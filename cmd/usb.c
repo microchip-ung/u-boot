@@ -543,11 +543,11 @@ static int usb_test(struct usb_device *dev, int port, char* arg)
 			    port ? USB_RT_PORT : USB_RECIP_DEVICE,
 			    port ? USB_PORT_FEAT_TEST : USB_FEAT_TEST,
 			    (mode << 8) | port,
-			    NULL, 0, USB_CNTL_TIMEOUT) == -1) {
+			    NULL, 0, USB_CNTL_TIMEOUT) < 0) {
 		printf("Error during SET_FEATURE.\n");
 		return 1;
 	} else {
-		printf("Test mode successfully set. Use 'usb start' "
+		printf("Test mode successfully set. Use 'usb stop' follow by 'usb start' "
 		       "to return to normal operation.\n");
 		return 0;
 	}
