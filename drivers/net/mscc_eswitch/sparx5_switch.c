@@ -474,8 +474,8 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 			for (u32 cnt = 0; cnt < 4; ++cnt) {
 				u32 base = (i / 4) * 4;
 				spx5_rmw(DEV2G5_DEV_RST_CTRL_PCS_TX_RST_SET(0),
-						 DEV2G5_DEV_RST_CTRL_PCS_TX_RST,
-						 priv, DEV2G5_DEV_RST_CTRL(base + cnt));
+					 DEV2G5_DEV_RST_CTRL_PCS_TX_RST,
+					 priv, DEV2G5_DEV_RST_CTRL(base + cnt));
 			}
 
 			if (priv->data->target == SPARX5_TARGET) {
