@@ -481,7 +481,10 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 			if (priv->data->target == SPARX5_TARGET) {
 				if (i < 12)
 					spx5_rmw(BIT(i), BIT(i),
-						priv, PORT_CONF_DEV5G_MODES);
+						 priv, PORT_CONF_DEV5G_MODES);
+				if (i >= 12 && i <= 15)
+					spx5_rmw(BIT(i - 12), BIT(i - 12),
+						 priv, PORT_CONF_DEV10G_MODES);
 
 				if ((i / 4 % 2) == 0)
 					/* Affects d0-d3,d8-d11..d40-d43 */
