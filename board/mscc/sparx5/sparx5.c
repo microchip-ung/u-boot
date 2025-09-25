@@ -412,7 +412,7 @@ int board_init(void)
 	switch (gd->board_type) {
 	case BOARD_TYPE_PCB135:
 		// Take pcb135 out of reset
-		writel(0x83000, MSCC_DEVCPU_GCB_GPIO_OE);
+		writel(0x93000, MSCC_DEVCPU_GCB_GPIO_OE);
 		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_CLR);
 		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_SET);
 		break;
