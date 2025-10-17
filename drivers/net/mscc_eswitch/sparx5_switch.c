@@ -450,8 +450,13 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 	if (priv->data->target == SPARX5_TARGET)
 		spx5_wr(0xfff, priv, PORT_CONF_DEV10G_MODES);
 
-	if (priv->data->target == LAN969X_TARGET)
-		spx5_wr(0x00117001, priv, PORT_CONF_DEV10G_MODES);
+	/* As we currently support speeds of 1G or less, then it is OK to set
+	 * all the ports that we support lower speeds than 2.5G.
+	 */
+	if (priv->data->target == LAN969X_TARGET) {
+		spx5_wr(0xf117001, priv, PORT_CONF_DEV10G_MODES);
+		spx5_wr(0x222200, priv, PORT_CONF_DEV5G_MODES);
+	}
 
 	for (i = 0; i < priv->data->num_ports; i++) {
 		struct sparx5_phy_port *p = &priv->ports[i];
