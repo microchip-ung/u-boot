@@ -446,9 +446,12 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 		break;
 	}
 
-	/* Enable all 10G ports */
-	if (priv->data->target == SPARX5_TARGET)
+	/* Enable all 5G, 10G and 25G ports to behave as 2.5G port */
+	if (priv->data->target == SPARX5_TARGET) {
+		spx5_wr(0x1fff, priv, PORT_CONF_DEV5G_MODES);
 		spx5_wr(0xfff, priv, PORT_CONF_DEV10G_MODES);
+		spx5_wr(0xff, priv, PORT_CONF_DEV25G_MODES);
+	}
 
 	/* As we currently support speeds of 1G or less, then it is OK to set
 	 * all the ports that we support lower speeds than 2.5G.

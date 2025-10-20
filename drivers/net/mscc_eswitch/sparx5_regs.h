@@ -72,6 +72,11 @@
 #define PORT_CONF_DEV10G_MODES \
 	__REG(TARGET_PORT_CONF, 0, 1, 0, 0, 1, 24, 4, 0, 1, 4)
 
+/* SPARX5 ONLY */
+/* PORT_CONF:HW_CFG:DEV25G_MODES */
+#define PORT_CONF_DEV25G_MODES                                                 \
+	__REG(TARGET_PORT_CONF, 0, 1, 0, 0, 1, 24, 8, 0, 1, 4)
+
 /* DSM:CFG:DEV_TX_STOP_WM_CFG */
 #define DSM_DEV_TX_STOP_WM_CFG(r)                        \
 	__REG(TARGET_DSM, 0, 1, 20, 0, 1, 3528, 1360, r, \
