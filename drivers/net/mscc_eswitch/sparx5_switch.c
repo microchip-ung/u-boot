@@ -42,6 +42,10 @@ static struct sparx5_private *dev_priv;
 #define DSM_CAL_TAXIS			5
 #define DSM_CAL_LEN			64
 
+#define SPX5_RGMII_TX_CLK_125MHZ	1   /* 1000Mbps */
+#define SPX5_RGMII_TX_CLK_25MHZ		2   /* 100Mbps */
+#define SPX5_RGMII_TX_CLK_2M5MHZ	3   /* 10Mbps */
+
 static const char * const sparx5_reg_names[] = {
 	"ana_ac", "ana_cl", "ana_l2", "ana_l3",
 	"asm", "lrn", "qfwd", "qs",
@@ -649,13 +653,22 @@ static void sparx5_port_rgmii_init(struct sparx5_private *priv, int port)
 	 * on the D28 and D29. They map in the DEVRGMII
 	 */
 	int rgmii_index = port - 28;
+	struct phy_device *phydev = priv->ports[port].phy;
+	int spd = phydev->speed;
+	int tx_clk_freq;
+	u32 clk_spd;
+
+	clk_spd = spd == SPEED_10 ? 0 : spd == SPEED_100 ? 1 : 2;
+	tx_clk_freq = (spd == SPEED_10	? SPX5_RGMII_TX_CLK_2M5MHZ :
+		       spd == SPEED_100	? SPX5_RGMII_TX_CLK_25MHZ :
+					  SPX5_RGMII_TX_CLK_125MHZ);
 
 	/* Enable the RGMII0 on the GPIOs */
 	spx5_wr(HSIO_WRAP_XMII_CFG_GPIO_XMII_CFG_SET(1),
 		priv, HSIO_WRAP_XMII_CFG(!rgmii_index));
 
 	/* Take the RGMII out of reset and set speed to 1G */
-	spx5_wr(HSIO_WRAP_RGMII_CFG_TX_CLK_CFG_SET(1),
+	spx5_wr(HSIO_WRAP_RGMII_CFG_TX_CLK_CFG_SET(tx_clk_freq),
 		priv, HSIO_WRAP_RGMII_CFG(rgmii_index));
 
 	/* Enable the RGMII delays on the MAC both on the RX and TX.
@@ -691,7 +704,7 @@ static void sparx5_port_rgmii_init(struct sparx5_private *priv, int port)
 		DEVRGMII_MAC_IFG_CFG_RX_IFG2_SET(1),
 		priv, DEVRGMII_MAC_IFG_CFG(port));
 
-	spx5_wr(DEVRGMII_DEV_RST_CTRL_SPEED_SEL_SET(2),
+	spx5_wr(DEVRGMII_DEV_RST_CTRL_SPEED_SEL_SET(clk_spd),
 		priv, DEVRGMII_DEV_RST_CTRL(port));
 }
 
@@ -900,6 +913,8 @@ static int sparx5_start(struct udevice *dev)
 
 			printf("%s (internal)\n", sparx5_port_has_link(priv, i) ? "Up" : "Down");
 		}
+
+		sparx5_port_init(priv, i);
 	}
 
 	return phy_ok ? 0 : ret_err;
