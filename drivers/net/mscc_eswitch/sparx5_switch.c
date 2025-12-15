@@ -42,6 +42,10 @@ static struct sparx5_private *dev_priv;
 #define DSM_CAL_TAXIS			5
 #define DSM_CAL_LEN			64
 
+#define SPX5_RGMII_TX_CLK_125MHZ	1   /* 1000Mbps */
+#define SPX5_RGMII_TX_CLK_25MHZ		2   /* 100Mbps */
+#define SPX5_RGMII_TX_CLK_2M5MHZ	3   /* 10Mbps */
+
 static const char * const sparx5_reg_names[] = {
 	"ana_ac", "ana_cl", "ana_l2", "ana_l3",
 	"asm", "lrn", "qfwd", "qs",
@@ -446,12 +450,20 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 		break;
 	}
 
-	/* Enable all 10G ports */
-	if (priv->data->target == SPARX5_TARGET)
+	/* Enable all 5G, 10G and 25G ports to behave as 2.5G port */
+	if (priv->data->target == SPARX5_TARGET) {
+		spx5_wr(0x1fff, priv, PORT_CONF_DEV5G_MODES);
 		spx5_wr(0xfff, priv, PORT_CONF_DEV10G_MODES);
+		spx5_wr(0xff, priv, PORT_CONF_DEV25G_MODES);
+	}
 
-	if (priv->data->target == LAN969X_TARGET)
-		spx5_wr(0x00117001, priv, PORT_CONF_DEV10G_MODES);
+	/* As we currently support speeds of 1G or less, then it is OK to set
+	 * all the ports that we support lower speeds than 2.5G.
+	 */
+	if (priv->data->target == LAN969X_TARGET) {
+		spx5_wr(0xf117001, priv, PORT_CONF_DEV10G_MODES);
+		spx5_wr(0x222200, priv, PORT_CONF_DEV5G_MODES);
+	}
 
 	for (i = 0; i < priv->data->num_ports; i++) {
 		struct sparx5_phy_port *p = &priv->ports[i];
@@ -474,14 +486,17 @@ static void sparx5_switch_config(struct sparx5_private *priv)
 			for (u32 cnt = 0; cnt < 4; ++cnt) {
 				u32 base = (i / 4) * 4;
 				spx5_rmw(DEV2G5_DEV_RST_CTRL_PCS_TX_RST_SET(0),
-						 DEV2G5_DEV_RST_CTRL_PCS_TX_RST,
-						 priv, DEV2G5_DEV_RST_CTRL(base + cnt));
+					 DEV2G5_DEV_RST_CTRL_PCS_TX_RST,
+					 priv, DEV2G5_DEV_RST_CTRL(base + cnt));
 			}
 
 			if (priv->data->target == SPARX5_TARGET) {
 				if (i < 12)
 					spx5_rmw(BIT(i), BIT(i),
-						priv, PORT_CONF_DEV5G_MODES);
+						 priv, PORT_CONF_DEV5G_MODES);
+				if (i >= 12 && i <= 15)
+					spx5_rmw(BIT(i - 12), BIT(i - 12),
+						 priv, PORT_CONF_DEV10G_MODES);
 
 				if ((i / 4 % 2) == 0)
 					/* Affects d0-d3,d8-d11..d40-d43 */
@@ -638,13 +653,22 @@ static void sparx5_port_rgmii_init(struct sparx5_private *priv, int port)
 	 * on the D28 and D29. They map in the DEVRGMII
 	 */
 	int rgmii_index = port - 28;
+	struct phy_device *phydev = priv->ports[port].phy;
+	int spd = phydev->speed;
+	int tx_clk_freq;
+	u32 clk_spd;
+
+	clk_spd = spd == SPEED_10 ? 0 : spd == SPEED_100 ? 1 : 2;
+	tx_clk_freq = (spd == SPEED_10	? SPX5_RGMII_TX_CLK_2M5MHZ :
+		       spd == SPEED_100	? SPX5_RGMII_TX_CLK_25MHZ :
+					  SPX5_RGMII_TX_CLK_125MHZ);
 
 	/* Enable the RGMII0 on the GPIOs */
 	spx5_wr(HSIO_WRAP_XMII_CFG_GPIO_XMII_CFG_SET(1),
 		priv, HSIO_WRAP_XMII_CFG(!rgmii_index));
 
 	/* Take the RGMII out of reset and set speed to 1G */
-	spx5_wr(HSIO_WRAP_RGMII_CFG_TX_CLK_CFG_SET(1),
+	spx5_wr(HSIO_WRAP_RGMII_CFG_TX_CLK_CFG_SET(tx_clk_freq),
 		priv, HSIO_WRAP_RGMII_CFG(rgmii_index));
 
 	/* Enable the RGMII delays on the MAC both on the RX and TX.
@@ -680,7 +704,7 @@ static void sparx5_port_rgmii_init(struct sparx5_private *priv, int port)
 		DEVRGMII_MAC_IFG_CFG_RX_IFG2_SET(1),
 		priv, DEVRGMII_MAC_IFG_CFG(port));
 
-	spx5_wr(DEVRGMII_DEV_RST_CTRL_SPEED_SEL_SET(2),
+	spx5_wr(DEVRGMII_DEV_RST_CTRL_SPEED_SEL_SET(clk_spd),
 		priv, DEVRGMII_DEV_RST_CTRL(port));
 }
 
@@ -889,6 +913,8 @@ static int sparx5_start(struct udevice *dev)
 
 			printf("%s (internal)\n", sparx5_port_has_link(priv, i) ? "Up" : "Down");
 		}
+
+		sparx5_port_init(priv, i);
 	}
 
 	return phy_ok ? 0 : ret_err;

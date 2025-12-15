@@ -2691,6 +2691,7 @@ void sparx5_serdes_port_init(struct sparx5_serdes_phy *phy, u32 mac_type)
 {
 	switch (mac_type) {
 	case IF_SGMII:
+	case IF_SGMII_CISCO:
 		sparx5_serdes_set_mode(phy, PHY_INTERFACE_MODE_SGMII);
 		break;
 	case IF_QSGMII:

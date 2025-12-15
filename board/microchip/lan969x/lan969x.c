@@ -10,6 +10,7 @@
 #include <debug_uart.h>
 #include <dm/uclass.h>
 #include <dm/uclass-internal.h>
+#include <linux/delay.h>
 #include <linux/sizes.h>
 #include <asm/global_data.h>
 #include <env.h>
@@ -272,11 +273,89 @@ static int lan969x_ev23x71a_board_init(void)
 	return 0;
 }
 
+#define rmw_le32(a, m, v)				\
+{							\
+	u32 val;					\
+	val = in_le32(a);				\
+	val &= ~(m);					\
+	val |= (v);					\
+	out_le32(a, val);				\
+}
+
 static int lan969x_ev09p11a_board_init(void)
 {
+	int poll_cnt = 0;
 	u32 val;
 
-	/* Release the reset of the PHYs, for the lan8814 PHYs.
+	/* First we need to enable the DDR PLL */
+	rmw_le32(CHIP_TOP_DDR_PLL_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_CFG_ENA_CFG_M,
+		 CHIP_TOP_DDR_PLL_CFG_ENA_CFG(0));
+	rmw_le32(CHIP_TOP_DDR_PLL_FREQ_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_BYPASS_ENA_M,
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_BYPASS_ENA(1));
+	rmw_le32(CHIP_TOP_DDR_PLL_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_CFG_DIVQ_M | CHIP_TOP_DDR_PLL_CFG_DIVR_M,
+		 CHIP_TOP_DDR_PLL_CFG_DIVQ(6) | CHIP_TOP_DDR_PLL_CFG_DIVR(6));
+
+	rmw_le32(CHIP_TOP_DDR_PLL_FREQ_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_DIVFI_M | CHIP_TOP_DDR_PLL_FREQ_CFG_DIVFF_M,
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_DIVFI(52) | CHIP_TOP_DDR_PLL_FREQ_CFG_DIVFF(12750684));
+	rmw_le32(CHIP_TOP_DDR_PLL_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_CFG_ENA_CFG_M,
+		 CHIP_TOP_DDR_PLL_CFG_ENA_CFG(1));
+	rmw_le32(CHIP_TOP_DDR_PLL_FREQ_CFG(LAN969X_CHIP_TOP_BASE),
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_BYPASS_ENA_M,
+		 CHIP_TOP_DDR_PLL_FREQ_CFG_BYPASS_ENA(0));
+
+	while (true) {
+		udelay(10);
+		val = in_le32(CHIP_TOP_DDR_PLL_CFG(LAN969X_CHIP_TOP_BASE));
+		if (CHIP_TOP_DDR_PLL_CFG_LOCK_STAT_X(val))
+			break;
+
+		poll_cnt++;
+		if (poll_cnt > 100) {
+			printf("DDR PLL could not get into lock");
+			break;
+		}
+	}
+
+	/* To get the output from the DDR PLL we need to set GPIO 10 in
+	 * alternate mode 3
+	 */
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 0));
+	val |= BIT(10);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 0), val);
+
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 1));
+	val |= BIT(10);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 1), val);
+
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2));
+	val &= ~BIT(10);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2), val);
+
+	/* On top of this set GPIO 9 as input, in this way the MDIO bus 0 is
+	 * disabled
+	 */
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 0));
+	val &= ~BIT(9);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 0), val);
+
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 1));
+	val &= ~BIT(9);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 1), val);
+
+	val = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2));
+	val &= ~BIT(9);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2), val);
+
+	val = in_le32(GCB_GPIO_OE(LAN969X_GCB_BASE));
+	val &= ~BIT(9);
+	out_le32(GCB_GPIO_OE(LAN969X_GCB_BASE), val);
+
+	/* Release the reset of the PHYs, for the lan8870 PHYs.
 	 * For the lan8840 PHY, it gets out of reset when chip gets out
 	 * of reset
 	 */
@@ -300,7 +379,6 @@ static int lan969x_ev09p11a_board_init(void)
 	val |= BIT(1);
 	out_le32(GCB_GPIO_OUT_SET(LAN969X_GCB_BASE), val);
 
-	//gpio_direction_output(2, 1);
 	return 0;
 }
 

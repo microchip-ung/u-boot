@@ -27,7 +27,7 @@
 &switch {
 	status = "okay";
 	ethernet-ports {
-		port4: port@64 {
+		port64: port@64 {
 			reg = <64>;
 			phy-handle = <&phy0>;
 			phys = <IF_SGMII FA_SERDES_TYPE_6G 0>; // type serdes serdes#
