@@ -18,5 +18,6 @@ software.
 
 If you have a Microchip toolchain installed in /opt/mchp on your Linux desktop, you can build the image like this:
 
+    ARCH=arm64 CROSS_COMPILE=/opt/mchp/mscc-toolchain-bin-2024.02-105/arm64-armv8_a-linux-gnu/bin/aarch64-linux- make O=build_sparx5_pcie_ep_arm64 mscc_sparx5_pcb13x_pciep_defconfig
     ARCH=arm64 CROSS_COMPILE=/opt/mchp/mscc-toolchain-bin-2024.02-105/arm64-armv8_a-linux-gnu/bin/aarch64-linux- make O=build_sparx5_pcie_ep_arm64
 
