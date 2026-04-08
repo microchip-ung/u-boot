@@ -493,7 +493,7 @@ void board_debug_uart_init(void)
 
 	gpio = in_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2));
 	gpio &= ~(BIT(3) | BIT(4));
-	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 1), gpio);
+	out_le32(GCB_GPIO_ALT(LAN969X_GCB_BASE, 2), gpio);
 }
 #endif
 
