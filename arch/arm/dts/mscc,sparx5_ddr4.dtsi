@@ -5,7 +5,7 @@
  */
 
 &ddr {
-	microchip,mem-name = "pcb134_ddr4 2023-05-11-12:52:54 00e206508b93";
+	microchip,mem-name = "pcb134_ddr4 2026-04-16-09:24:51 87c23aab7e44";
 	microchip,mem-speed = <1667>;
 	microchip,mem-size = <0x80000000>;
 	microchip,mem-bus-width = <32>;
@@ -21,7 +21,7 @@
 		0x00000004	/* ecccfg0 */
 		0x00020196	/* init0 */
 		0x00a20000	/* init1 */
-		0x08200501	/* init3 */
+		0x08200101	/* init3 */
 		0x10080200	/* init4 */
 		0x00110004	/* init5 */
 		0x00000401	/* init6 */
@@ -35,17 +35,17 @@
 	>;
 
 	microchip,timing-reg = <
-		0x130a0e0e	/* dramtmg0 */
-		0x00050315	/* dramtmg1 */
+		0x130a0e0f	/* dramtmg0 */
+		0x00050415	/* dramtmg1 */
 		0x00000010	/* dramtmg12 */
 		0x0709050f	/* dramtmg2 */
 		0x0050400c	/* dramtmg3 */
 		0x06030306	/* dramtmg4 */
 		0x05050303	/* dramtmg5 */
 		0x03020a04	/* dramtmg8 */
-		0x0003020d	/* dramtmg9 */
+		0x0002020d	/* dramtmg9 */
 		0x0700060c	/* odtcfg */
-		0x0062006d	/* rfshtmg */
+		0x0032006d	/* rfshtmg */
 	>;
 
 	microchip,mapping-reg = <
@@ -68,9 +68,9 @@
 		0x00c01884	/* dxccr */
 		0x00000b22	/* pgcr2 */
 		0x00000000	/* schcr1 */
-		0x0007bb09	/* zq0pr */
-		0x0007fb2b	/* zq1pr */
-		0x0007fb2b	/* zq2pr */
+		0x00079b09	/* zq0pr */
+		0x00079b2b	/* zq1pr */
+		0x00079b2b	/* zq2pr */
 		0x03058e00	/* zqcr */
 	>;
 
