@@ -18,7 +18,6 @@ void ft_fwd_env(void *blob, int offset, const char *tag)
 
 int ft_board_setup(void *blob, struct bd_info *bd)
 {
-#ifndef CONFIG_TARGET_SPARX5
 	int node = fdt_path_offset(blob, "/meba");
 	uchar mac_addr[6];
 
@@ -31,7 +30,6 @@ int ft_board_setup(void *blob, struct bd_info *bd)
 		if (eth_env_get_enetaddr("ethaddr", mac_addr))
 			(void) fdt_setprop(blob, node, "mac-address", &mac_addr, 6);
 	}
-#endif
 
 #if defined(CONFIG_SOC_SERVALT)
 	/* Try to update the Linux cpu clock (for backwards compatibility) */
