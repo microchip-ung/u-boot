@@ -30,6 +30,7 @@ DECLARE_GLOBAL_DATA_PTR;
 enum {
 	BOARD_TYPE_PCB134 = 134,
 	BOARD_TYPE_PCB135,
+	BOARD_TYPE_PCB135_REV3,
 };
 
 #if defined(CONFIG_DESIGNWARE_SPI)
@@ -360,13 +361,57 @@ static int probe_gpio(unsigned int gpio)
 	return 0;
 }
 
+static int board_miim_read(int addr, int reg)
+{
+	u32 val;
+	int ret;
+
+	writel(MSCC_M_DEVCPU_GCB_MII_CMD_MIIM_CMD_VLD |
+	       MSCC_F_DEVCPU_GCB_MII_CMD_MIIM_CMD_PHYAD(addr) |
+	       MSCC_F_DEVCPU_GCB_MII_CMD_MIIM_CMD_REGAD(reg) |
+	       MSCC_F_DEVCPU_GCB_MII_CMD_MIIM_CMD_OPR_FIELD(2),
+	       MSCC_DEVCPU_GCB_MII_CMD(0));
+
+	udelay(100);
+
+	val = readl(MSCC_DEVCPU_GCB_MII_DATA(0));
+	if (val & MSCC_M_DEVCPU_GCB_MII_DATA_MIIM_DATA_SUCCESS) {
+		ret = -EIO;
+		goto out;
+	}
+
+	ret = val & 0xFFFF;
+ out:
+	return ret;
+}
+
 static void do_board_detect(void)
 {
+	int phyid;
+
 	/* GPIO20 has extern pull-down, so will still be high */
-	if (probe_gpio(20))
+	if (probe_gpio(20)) {
 		gd->board_type = BOARD_TYPE_PCB134;
-	else
+	} else {
 		gd->board_type = BOARD_TYPE_PCB135;
+
+		/* Determin the PCB revision. If the PHY at address 2 on the
+		 * MDIO bus 0 is a lan8814 then it is revision 5 or 6. If the
+		 * PHY is a VTSS then it is one of the previous revisions.
+		 * We need to determin the revision because we need to know if
+		 * we need or not to pull GPIO16 of sparx5. Because we need to
+		 * release the coma mode for the lan8814 PHYs. We can't always
+		 * do that regarding of the board because on the older revisions
+		 * of board the GPIO 16 is used for the SPI chip select. Meaning
+		 * that if pull high the GPIO16 then we lose access to the NOR
+		 * flash on those revisions. So the fix here is to look what PHY
+		 * it is on the board and based on pull high or not GPIO16.
+		 */
+		phyid = board_miim_read(0, 2);
+		if (phyid == 0x7) {
+			gd->board_type = BOARD_TYPE_PCB135_REV3;
+		}
+	}
 }
 
 #if defined(CONFIG_MULTI_DTB_FIT)
@@ -382,6 +427,10 @@ int board_fit_config_name_match(const char *name)
 		return 0;
 
 	if (gd->board_type == BOARD_TYPE_PCB135 &&
+	    strcmp(name, "sparx5_pcb135" PCB_SUFFIX) == 0)
+		return 0;
+
+	if (gd->board_type == BOARD_TYPE_PCB135_REV3 &&
 	    strcmp(name, "sparx5_pcb135" PCB_SUFFIX) == 0)
 		return 0;
 
@@ -413,6 +462,14 @@ int board_init(void)
 	case BOARD_TYPE_PCB135:
 		// Take pcb135 out of reset
 		writel(0x93000, MSCC_DEVCPU_GCB_GPIO_OE);
+		writel(0x83000, MSCC_DEVCPU_GCB_GPIO_OE);
+		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_CLR);
+		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_SET);
+		break;
+	case BOARD_TYPE_PCB135_REV3:
+		// Take pcb135 out of reset
+		writel(0x83000, MSCC_DEVCPU_GCB_GPIO_OE);
+		writel(0x83000, MSCC_DEVCPU_GCB_GPIO_OE);
 		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_CLR);
 		writel(0x80000, MSCC_DEVCPU_GCB_GPIO_OUT_SET);
 		break;
@@ -448,6 +505,9 @@ int board_late_init(void)
 		break;
 	case BOARD_TYPE_PCB135:
 		env_set("pcb", "pcb135" PCB_SUFFIX);
+		break;
+	case BOARD_TYPE_PCB135_REV3:
+		env_set("pcb", "pcb135_rev3" PCB_SUFFIX);
 		break;
 	default:
 		env_set("pcb", "unknown");
